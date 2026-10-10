@@ -1,0 +1,39 @@
+# pidvs-boot-recovery.service - runs updater/cli.js's recover-boot check once, at the start of every real boot,
+# before pidvs-server.service is allowed to start. See updater/release-manager.js's recoverFromUnconfirmedBoot()
+# for the full reasoning - closes the one gap the in-process update health-check/rollback can't cover: a power
+# loss between the `current` symlink flipping to a new version and that version actually confirming itself
+# healthy. If they disagree at boot, this points `current` back at the last confirmed-good version BEFORE
+# pidvs-server.service ever gets a chance to start on the (possibly broken) unconfirmed one.
+#
+# Type=oneshot + RemainAfterExit=yes so pidvs-server.service's After= below is satisfied once this has run,
+# without staying "active" as a long-running process. Deliberately NOT wired into pidvs-server.service's own
+# restarts (no PartOf=/BindsTo=) - this must only run once per actual boot, not on every activate()-triggered
+# `systemctl restart pidvs-server.service`, which legitimately leaves current disagreeing with last-known-good
+# for the few seconds a real update is being health-checked - that's activate() doing its job, not a crash to
+# recover from.
+#
+# After=, not Requires=, on pidvs-server.service's side - a best-effort safety check has no business being able
+# to block the main service from starting at all if it somehow fails itself (recover-boot is written to never
+# throw regardless, but the ordering itself shouldn't depend on that).
+#
+# Install:
+#   sudo cp pidvs-boot-recovery.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable pidvs-boot-recovery.service
+#   (then add `After=pidvs-boot-recovery.service` to pidvs-server.service and re-install that unit too)
+
+[Unit]
+Description=Waxcode boot-time update recovery check
+DefaultDependencies=no
+After=local-fs.target
+Before=pidvs-server.service
+Requisite=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=__BOX_USER__
+ExecStart=/usr/bin/node /home/__BOX_USER__/updater/cli.js recover-boot
+
+[Install]
+WantedBy=multi-user.target

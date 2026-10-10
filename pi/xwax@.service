@@ -1,0 +1,100 @@
+# xwax@.service - the real-time timecode/playback engine, one instance per deck. A systemd TEMPLATE unit ("@") instantiated per deck
+# (xwax@1.service, xwax@2.service, %i = deck number) - enabling deck 3/4 later is starting another instance, not new code.
+#
+# Replaces the old single-deck xwax.service now that the ALSA split exists (pi/asound.conf) - don't run both at once, they'd fight over hw:0,0.
+# One control socket per deck, not one shared socket - Node maps deck number -> socket path.
+#
+# --socket/--timecode/--buffer/--cue-offset MUST come before --alsa - xwax.c's parser reads those globals when --alsa runs (commit_deck()).
+# Get the order wrong and LOAD commands get silently dropped, or the deck runs with defaults, with no error either way.
+#
+# --cue-offset defaults to 24.8, two components. 19.8 is the pressing's own measured constant (its absolute-position encoding doesn't start
+# counting from 0 at the DJ's natural cue-in point), confirmed by ear on both decks 2026-07-19. The remaining 5s is back-cueing headroom -
+# started at 20s on 2026-08-22 when track start sat so close to the edge that back-cueing could run the needle off, cut to 5s the same day
+# once that proved more than needed. Costs 5s of usable timecode at the far end rather than 20s. Overridable per deck at runtime via PIDVS_CUE_OFFSET (see EnvironmentFile below);.
+#
+# A --gain flag (output level multiplier) was tried and deliberately reverted from the xwax fork - level matching is the mixer's job, not this box's.
+#
+# SDL_VIDEODRIVER/SDL_AUDIODRIVER=dummy IS needed here (unlike the old single-deck xwax.service) - two simultaneous instances could plausibly
+# conflict over the same KMS/DRM display "master" role; dummy sidesteps the question at zero cost since no SDL window is ever looked at.
+#
+# No longer auto-started at boot - starts on demand at LOAD and stops when passthrough turns on. Found via a real thermal incident: both
+# decks running continuously from boot kept the Pi 5 soft-throttling even idle (~130% combined CPU). Needs pi/pidvs-sudoers-xwax-lifecycle installed.
+#
+# Install (per deck) - daemon-reload only, deliberately NOT enabled:
+#   sudo cp xwax@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#
+# If migrating from an older install that DID enable these:
+#   sudo systemctl disable --now xwax@1.service xwax@2.service
+
+[Unit]
+Description=xwax DVS engine (deck %i)
+After=sound.target
+
+[Service]
+Type=simple
+User=__BOX_USER__
+# Per-deck runtime overrides. Environment= sets hardcoded defaults BEFORE EnvironmentFile=, so every ${VAR} below is always defined even if
+# that file is missing (systemd errors on a genuinely-undefined variable). The "-" prefix makes a missing file non-fatal.
+# PIDVS_TIMECODE picks Serato side A vs B. PIDVS_CUE_OFFSET is the cue offset (see the --cue-offset note above).
+# Path fixed 2026-08-22: was /home/__BOX_USER__/pidvs-server/data/, which has never existed on the box - so this file never resolved and the
+# timecode override was silently dead, always falling back to the default. /home/__BOX_USER__/data is the real shared data dir (the one
+# release-manager.js symlinks into every release), so values here survive updates.
+# Two files, both optional: deck%i-timecode.env is the one deck-timecode.js already writes (leave that filename alone - it's the app's
+# side A/B switch); deck%i.env is for everything else, currently just PIDVS_CUE_OFFSET.
+Environment=PIDVS_TIMECODE=serato_2a
+Environment=PIDVS_CUE_OFFSET=24.8
+# Two separate halves of running at phono level, both written to deck%i.env by deck-input-mode.js:
+#
+#   PIDVS_PHONO_IN   xwax's own --phono. Lowers the timecoder's zero-crossing threshold by about
+#                    36dB so a CARTRIDGE-level timecode signal still registers.
+#   PIDVS_PHONO_OUT  --phono-out <dB>. Attenuates and inverse-RIAA's the playback output, so a
+#                    digital track can share the mixer's phono channel with a real record instead
+#                    of the mixer having to be flipped between phono and line mid-set.
+#
+# Both empty by default, which is a line-level box and exactly the behaviour before either existed.
+#
+# The binary is reached through ~/bin/xwax, a SYMLINK, not /usr/local/bin/xwax directly.
+#
+# That symlink is what lets a software update replace the audio engine: it lives in the box owner's
+# own home, so updater/release-manager.js can repoint it with no root at all, and rolling a release
+# back takes the engine back with it (see that file's pointXwaxAt()). systemd requires ExecStart's
+# program to be a literal path, so this indirection has to be a symlink rather than a variable.
+#
+# provision.sh points it at /usr/local/bin/xwax, the build it made at card-build time; the first
+# over-the-wire update repoints it into that release's own directory.
+#
+# Written WITHOUT braces in ExecStart on purpose: systemd word-splits $VAR but treats ${VAR} as a
+# single argument, so an empty ${PIDVS_PHONO_IN} would be passed as a stray empty argument whereas
+# an empty $PIDVS_PHONO_IN disappears entirely, which is what a boolean flag needs.
+Environment=PIDVS_PHONO_IN=
+Environment=PIDVS_PHONO_OUT=
+EnvironmentFile=-/home/__BOX_USER__/data/deck%i-timecode.env
+EnvironmentFile=-/home/__BOX_USER__/data/deck%i.env
+# --buffer must stay matched with asound.conf's shared dmix/dsnoop period_size/buffer_size -.
+ExecStart=/home/__BOX_USER__/bin/xwax --socket /tmp/xwax-deck%i.sock --timecode ${PIDVS_TIMECODE} --buffer 2048 --cue-offset ${PIDVS_CUE_OFFSET} $PIDVS_PHONO_IN $PIDVS_PHONO_OUT --rtprio 80 --no-interface --alsa dvs_deck%i
+Restart=on-failure
+RestartSec=2
+
+# SDL needs a display to create its window; there isn't one on a headless box. dummy is a standard always-available SDL2 backend for this.
+# SDL is not started at all now (--no-interface above), so these only matter if it ever is again.
+# The window was drawing 1280x960 to the dummy driver on a box with no screen - 17-22% of a core per
+# deck with nothing loaded - and interface.c holds the RIG LOCK across every draw(), which is the
+# same lock rig_main() needs to service the control socket. See xwax.c's own note (2026-09-02).
+Environment=SDL_VIDEODRIVER=dummy
+Environment=SDL_AUDIODRIVER=dummy
+
+# Real-time scheduling (SCHED_FIFO via --rtprio above) needs explicit permission - Linux blocks non-root users from raising priority by default.
+LimitRTPRIO=95
+LimitMEMLOCK=infinity
+
+# Without this, a SIGSEGV here produces no core file regardless of systemd-coredump being installed
+# (the kernel's core_pattern pipe respects the crashing process's own RLIMIT_CORE).
+LimitCORE=infinity
+
+# The realtime audio engine itself - losing it mid-set is the worst possible failure. Same reasoning as
+# pidvs-server.service's own OOMScoreAdjust -.
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target

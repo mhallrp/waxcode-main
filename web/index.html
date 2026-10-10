@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- interactive-widget=overlays-content: the keyboard covers the list instead of reflowing it,
+         so the folder you were looking at stays exactly where it was. user-scalable=no because this
+         is a control surface - a pinch while reaching for a loop button should do nothing. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Waxcode" />
+    <meta name="theme-color" content="#0C0B10" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <!-- A real 32px resample of the app icon, not the 192 squashed by the browser: this mark is a
+         thin ring around fine bars, and it is the first thing to turn to mush. 32 is also what a
+         retina tab strip draws at 1:1. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <title>Waxcode</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
