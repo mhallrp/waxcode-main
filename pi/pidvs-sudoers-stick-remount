@@ -1,0 +1,28 @@
+# /etc/sudoers.d/pidvs-stick-remount
+#
+# Lets the server briefly make a mounted stick writable, so it can save
+# what it learned - the library manifest it builds while scanning (see
+# stick-manifest.js) and the owner's favourites (favourites.js).
+#
+# usb-mount.sh mounts sticks read-only on purpose: a DJ yanks a stick
+# without warning, and exFAT corrupts badly when interrupted mid-write.
+# That protection is kept - the stick is read-only at every instant
+# except the few milliseconds a save actually takes, and the server
+# remounts it back immediately afterwards.
+#
+# The alternative shapes were considered and rejected (2026-08-29):
+# mounting read-write permanently gives a yank the whole session to
+# land badly, and a bind-mount arrangement exposing only .waxcode still
+# leaves the filesystem writable underneath while being far more
+# machinery to set up and tear down per stick.
+#
+# Scoped to remount only, and only under /media/pidvs/. Not a general
+# mount capability - that would let any bug here mount arbitrary
+# devices anywhere.
+#
+# Install:
+#   sudo cp pidvs-sudoers-stick-remount /etc/sudoers.d/pidvs-stick-remount
+#   sudo chmod 440 /etc/sudoers.d/pidvs-stick-remount
+#   sudo visudo -c
+
+__BOX_USER__ ALL=(root) NOPASSWD: /usr/bin/mount -o remount\,rw /media/pidvs/*, /usr/bin/mount -o remount\,ro /media/pidvs/*

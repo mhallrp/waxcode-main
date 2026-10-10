@@ -1,0 +1,77 @@
+# pidvs-dmix-keeper-playback.service - holds dvs_shared_playback's underlying hw:0,0 connection
+# open continuously from boot, so it's never left to whichever deck's xwax/alsaloop happens to
+# open the shared dmix layer first.
+#
+# Root cause this fixes: dmix's design means whichever process first opens it becomes the de
+# facto keeper of the real hardware connection - everyone else (xwax@1/xwax@2/alsaloop, per deck)
+# just attaches to its shared ring buffer. None of THOSE are meant to run continuously -
+# xwax@.service starts on demand at LOAD and stops on passthrough (2026-08-04 thermal fix, see its
+# own header), and alsaloop is spawned/killed by Node per deck, documented to crash outright on
+# simultaneous ALSA overrun events on both decks (see passthrough.js). If whichever one happens to
+# be holding the "first opener" role dies without cleanly releasing it, the shared layer is left
+# syncing against a hardware timing reference nothing is actually maintaining anymore. Real symptom
+# seen on hardware 2026-08-06: audible crackling across both decks, considerably worse with a
+# second deck loaded, fixed only by a full reboot - a plain `systemctl restart xwax@1` never
+# helped, because it's just a client of the shared layer, not the thing holding the real hardware
+# connection. `/proc/asound/card0/pcm0p/sub0/status` showed `owner_pid` pointing at a process that
+# no longer existed.
+#
+# This service makes ITSELF the permanent first opener instead - a trivial, silent `aplay` stream
+# that's never meant to stop, so xwax@N/alsaloop's own routine start/stop churn never touches the
+# real hardware binding at all. Negligible CPU (no real DSP, just periodic buffer refills) -
+# doesn't reopen the Pi 5 thermal-throttling issue that made xwax@.service on-demand in the first
+# place. Genuinely unverified beyond a short manual `aplay`/`xwax@1` coexistence test (2026-08-06,
+# ran fine alongside a live xwax@1 for several seconds with no conflict) - hasn't yet been tested
+# across an actual extended multi-hour session or a real power cycle. See pidvs-dmix-keeper-capture.service
+# for the capture-side counterpart (dsnoop, same reasoning).
+#
+# Install:
+#   sudo cp pidvs-dmix-keeper-playback.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pidvs-dmix-keeper-playback.service
+
+[Unit]
+Description=Waxcode shared ALSA playback keeper (holds dvs_shared_playback open)
+After=sound.target
+
+[Service]
+Type=simple
+User=__BOX_USER__
+ExecStart=/usr/bin/aplay -D dvs_shared_playback -t raw -f S16_LE -c 8 -r 48000 -q /dev/zero
+Restart=always
+RestartSec=2
+
+# Losing this defeats its entire purpose (it exists specifically to never die) - same reasoning as
+# xwax@.service/pidvs-server.service's own OOMScoreAdjust.
+OOMScoreAdjust=-500
+
+# REALTIME, because this IS the audio path for both decks.
+#
+# xwax's own audio thread is correctly SCHED_FIFO 80, so analysis work cannot preempt it. But xwax
+# reads and writes through dmix, and the underlying hardware connection is held open by THIS process -
+# which sat at SCHED_OTHER nice 0 with nothing protecting it. On 2026-10-07 the owner heard both decks
+# glitch for about a second whenever a track was loaded. The logs showed ALSA xruns on both decks in
+# the same second as every LOAD, plus "aplay: underrun!!!" here, while two on-demand ffmpegs at nice 2
+# took 78% and 90% of CPU. Starving the bridge glitches every deck at once, however well scheduled the
+# decks themselves are.
+#
+# Priority 20 is deliberately far below xwax's 80: xwax still wins every time they contend. This
+# process only shuffles bytes to /dev/zero and blocks on ALSA the rest of the time, so it is I/O-bound
+# and safe to run FIFO - it cannot spin and starve the box.
+# HELD BACK DELIBERATELY - DO NOT ENABLE WITHOUT READING THIS.
+#
+# The three lines below are the right fix and are commented out on purpose. The owner's box is kept in
+# line with the two boxes in the field, so that what he tests is what they actually run. A release
+# tarball carries only server/ and xwax/, so nothing in pi/ can reach them; enabling this here would
+# protect new cards and his box while leaving the field on something different, which is how a fault
+# gets missed rather than found.
+#
+# Uncomment all three the moment pi/ can actually be delivered, and enable it
+# everywhere in the same change.
+#CPUSchedulingPolicy=fifo
+#CPUSchedulingPriority=20
+#LimitRTPRIO=30
+
+
+[Install]
+WantedBy=multi-user.target

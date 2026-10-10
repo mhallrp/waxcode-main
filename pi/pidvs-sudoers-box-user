@@ -1,0 +1,17 @@
+# Full passwordless sudo for the box's own user.
+#
+# Owner's call, 2026-10-09: the project is free and open source, and somebody who owns the hardware
+# should be able to change it without a password they were never told. The narrow NOPASSWD rules
+# beside this one stay as they are - they document what the SERVER is allowed to do, which is worth
+# keeping explicit even when this rule makes them redundant.
+#
+# What keeps this reasonable rather than reckless:
+#   - sshd is DISABLED in the shipped image. There is no remote login to escalate from unless the
+#     builder turns it on in Imager, at which point they have chosen it and set their own password.
+#   - The account password is per-box: whatever the builder typed into Imager, or a random one
+#     nobody ever learns. There is no shared default to publish.
+#   - Anyone physically holding the box can pull the card and edit it anyway.
+#
+# It also means provisioning, over-the-air updates and check-drift.sh never need a password after
+# the first run, which removes the prompt that made the build un-runnable unattended.
+__BOX_USER__ ALL=(ALL) NOPASSWD: ALL

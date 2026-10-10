@@ -1,0 +1,16 @@
+.DS_Store
+node_modules/
+npm-debug.log*
+.env
+.env.local
+
+# The box's own runtime state: library caches, favourites, deck settings, box name.
+server/data/
+
+# Build output. server/web/ IS committed - the box never builds - but these are not.
+.build/
+qmtempo/qmtempo
+web/dist/
+*.local
+
+*.local.md

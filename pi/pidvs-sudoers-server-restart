@@ -1,0 +1,26 @@
+# /etc/sudoers.d/pidvs-server-restart
+#
+# Lets the box's owner restart the Node server without a password.
+#
+# pidvs-server.service is system-scope (it has to be - it manages xwax@N
+# units), so reloading deployed code needs
+# root. Over a non-interactive ssh session sudo cannot prompt, which
+# meant every code deploy during development ended with "now run this
+# yourself" - and repeatedly with measurements taken against a box that
+# was still running the previous build, because the restart had not
+# happened yet (2026-08-29: three separate wrong conclusions drawn that
+# way in one session).
+#
+# Scoped to exactly one unit and one verb. Not `systemctl *`, not
+# `restart *` - a wildcard here would grant control of every service on
+# the box including ssh and the firewall. The unit name is spelled with
+# its .service suffix because sudoers matches the literal argv, so the
+# caller must invoke it the same way.
+#
+# Install:
+#   sudo cp pidvs-sudoers-server-restart /etc/sudoers.d/pidvs-server-restart
+#   sudo chmod 440 /etc/sudoers.d/pidvs-server-restart
+#   sudo visudo -c   # validate before trusting it - a broken sudoers.d
+#                    # file can break sudo system-wide
+
+__BOX_USER__ ALL=(root) NOPASSWD: /usr/bin/systemctl restart pidvs-server.service

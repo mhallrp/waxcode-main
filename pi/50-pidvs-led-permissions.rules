@@ -1,0 +1,18 @@
+# Grants __BOX_USER__ (non-root) write access to the ACT LED's control files (root:root 644 by default) - needed by server/src/led-status.js
+# (pidvs-led-booting.service runs as root, so it never actually needed this rule - see that service's own comment).
+# chmod via RUN+=, not a static GROUP/MODE rule - udev doesn't support that for virtual sysfs LED attributes.
+#
+# ACTION=="add|change", not just "add" - confirmed on real hardware (2026-08-18) that delay_on/delay_off are
+# recreated fresh (back to root:root 644) every time the "timer" trigger is re-selected, which fires its own
+# "change" uevent for this device - not just once at boot when the LED device itself first appears. An "add"-only
+# rule chmods files that may not even exist yet (no trigger has set them up), and never re-applies once they're
+# recreated later - silently broken for led-status.js's whole life until this was actually exercised (the
+# EACCES was caught and logged rather than crashing anything, so it stayed hidden).
+#
+# Install:
+#   sudo cp 50-pidvs-led-permissions.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger --subsystem-match=leds
+
+SUBSYSTEM=="leds", KERNEL=="ACT", ACTION=="add|change", RUN+="/bin/chmod 664 /sys%p/brightness /sys%p/trigger /sys%p/delay_on /sys%p/delay_off"
+SUBSYSTEM=="leds", KERNEL=="ACT", ACTION=="add|change", RUN+="/bin/chgrp __BOX_USER__ /sys%p/brightness /sys%p/trigger /sys%p/delay_on /sys%p/delay_off"

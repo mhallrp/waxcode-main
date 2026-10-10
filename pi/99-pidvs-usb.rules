@@ -1,0 +1,17 @@
+# Auto-mount USB storage and trigger a Pi DVS library scan on insert (see pi/usb-mount.sh). Matches partitions and bare whole-disk
+# "superfloppy" filesystems. Deliberately does NOT gate on ENV{ID_FS_TYPE}!="" - blkid's own import rules aren't guaranteed to have finished
+# by the time this evaluates during a hotplug burst; usb-mount.sh runs blkid itself with a retry loop instead.
+#
+# "add" hands off to pidvs-usb-mount@.service (TAG+="systemd"/SYSTEMD_WANTS) rather than running inline via RUN+= - a direct RUN+= at boot
+# coldplug races D-Bus/Node still starting up and can lose outright. "remove" stays direct RUN+= since a real unplug happens well after boot.
+#
+# Install:
+#   sudo cp 99-pidvs-usb.rules /etc/udev/rules.d/
+#   sudo cp usb-mount.sh /usr/local/bin/pidvs-usb-mount.sh
+#   sudo chmod +x /usr/local/bin/pidvs-usb-mount.sh
+#   sudo cp pidvs-usb-mount@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo udevadm control --reload-rules
+
+SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]|sd[a-z]", ACTION=="add", TAG+="systemd", ENV{SYSTEMD_WANTS}+="pidvs-usb-mount@%k.service"
+SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]|sd[a-z]", ACTION=="remove", RUN+="/usr/local/bin/pidvs-usb-mount.sh remove %k"

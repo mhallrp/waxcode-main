@@ -1,0 +1,9 @@
+# Maintains /run/pidvs/cable-present (tmpfs, cleared each boot) - the live signal the setup gate checks.
+# Same device match as 40-pidvs-usbmuxd-kick.rules, kept separate on purpose. udev replays "add" at boot, so a cable left in stays reflected.
+#
+# Install:
+#   sudo cp 41-pidvs-cable-presence.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ENV{PRODUCT}=="5ac/12[9a][0-9a-f]/*|5ac/8600/*", ACTION=="add", RUN+="/bin/mkdir -p /run/pidvs", RUN+="/usr/bin/touch /run/pidvs/cable-present"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ENV{PRODUCT}=="5ac/12[9a][0-9a-f]/*|5ac/8600/*", ACTION=="remove", RUN+="/bin/rm -f /run/pidvs/cable-present"

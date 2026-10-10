@@ -1,0 +1,12 @@
+[Unit]
+Description=Expand the root filesystem to fill the card
+After=local-fs.target
+Before=pidvs-server.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pidvs-expand-rootfs
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

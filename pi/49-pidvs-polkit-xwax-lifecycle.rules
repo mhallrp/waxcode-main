@@ -1,0 +1,35 @@
+// /etc/polkit-1/rules.d/49-pidvs-polkit-xwax-lifecycle.rules
+//
+// The missing half of pidvs-sudoers-xwax-lifecycle. Found the hard way
+// on real hardware: `sudo systemctl start xwax@N.service` works fine
+// when run interactively over SSH (confirmed by hand), but the SAME
+// command, run by pidvs-server.service (a background systemd service,
+// no logind session/seat attached), fails with "Interactive
+// authentication required" - sudoers grants root execution of the
+// systemctl BINARY, but systemctl itself talks to systemd over D-Bus,
+// and systemd's own unit-management actions are gated by PolicyKit
+// (polkit) separately, regardless of the caller already being root.
+// polkit's default policy requires an active interactive session for
+// org.freedesktop.systemd1.manage-units, which a background daemon
+// with no seat can never satisfy no matter what sudoers allows -
+// these are two independent authorization layers, not one.
+//
+// Scoped the same way pidvs-sudoers-xwax-lifecycle is: only user
+// __BOX_USER__, only units matching the xwax@ prefix, only the start/stop
+// verbs (systemd exposes `unit`/`verb` as inspectable action details
+// for exactly this kind of fine-grained rule).
+//
+// Install:
+//   sudo cp 49-pidvs-polkit-xwax-lifecycle.rules /etc/polkit-1/rules.d/
+//   sudo systemctl restart polkit
+
+polkit.addRule(function(action, subject) {
+    if (action.id != "org.freedesktop.systemd1.manage-units") return;
+    if (subject.user != "__BOX_USER__") return;
+
+    var unit = action.lookup("unit");
+    var verb = action.lookup("verb");
+    if (unit && unit.indexOf("xwax@") === 0 && (verb == "start" || verb == "stop")) {
+        return polkit.Result.YES;
+    }
+});

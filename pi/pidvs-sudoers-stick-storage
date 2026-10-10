@@ -1,0 +1,23 @@
+# /etc/sudoers.d/pidvs-stick-storage
+#
+# Lets the Node server (running as __BOX_USER__, see pidvs-server.service)
+# briefly remount a USB stick read-write so it can save that stick's own
+# data into .waxcode/ - favourites today, the analysis cache later. See
+# server/src/stick-storage.js for the full reasoning.
+#
+# Sticks are mounted READ-ONLY by usb-mount.sh on purpose, and they stay
+# that way except for the moment of a write: stick-storage.js remounts rw,
+# writes, and remounts ro again in a `finally` so an error path can't leave
+# someone's stick writable. Writes are rare (a star being toggled) and tiny.
+#
+# Scoped to remount only - it cannot mount a new filesystem, cannot choose
+# a device, and cannot unmount anything. The wildcard is the mount point,
+# which is always /media/pidvs/port-N (see usb-mount.sh's get_port_id).
+#
+# Install:
+#   sudo cp pidvs-sudoers-stick-storage /etc/sudoers.d/pidvs-stick-storage
+#   sudo chmod 440 /etc/sudoers.d/pidvs-stick-storage
+#   sudo visudo -c   # validate before trusting it - a broken sudoers.d
+#                    # file can break sudo system-wide
+
+__BOX_USER__ ALL=(root) NOPASSWD: /bin/mount -o remount\,rw /media/pidvs/*, /bin/mount -o remount\,ro /media/pidvs/*

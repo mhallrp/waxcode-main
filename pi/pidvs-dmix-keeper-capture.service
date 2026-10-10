@@ -1,0 +1,56 @@
+# pidvs-dmix-keeper-capture.service - capture-side counterpart to
+# pidvs-dmix-keeper-playback.service. See that file's own header comment for the full rationale -
+# this one holds dvs_shared_capture's underlying hw:0,0 connection open the same way, on the
+# capture (dsnoop) side, so xwax@N's own capture route and alsaloop's passthrough capture route
+# never become the accidental first opener either.
+#
+# Install:
+#   sudo cp pidvs-dmix-keeper-capture.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pidvs-dmix-keeper-capture.service
+
+[Unit]
+Description=Waxcode shared ALSA capture keeper (holds dvs_shared_capture open)
+After=sound.target
+
+[Service]
+Type=simple
+User=__BOX_USER__
+ExecStart=/usr/bin/arecord -D dvs_shared_capture -t raw -f S16_LE -c 8 -r 48000 -q /dev/null
+Restart=always
+RestartSec=2
+
+# Losing this defeats its entire purpose (it exists specifically to never die) - same reasoning as
+# xwax@.service/pidvs-server.service's own OOMScoreAdjust.
+OOMScoreAdjust=-500
+
+# REALTIME, because this IS the audio path for both decks.
+#
+# xwax's own audio thread is correctly SCHED_FIFO 80, so analysis work cannot preempt it. But xwax
+# reads and writes through dmix, and the underlying hardware connection is held open by THIS process -
+# which sat at SCHED_OTHER nice 0 with nothing protecting it. On 2026-10-07 the owner heard both decks
+# glitch for about a second whenever a track was loaded. The logs showed ALSA xruns on both decks in
+# the same second as every LOAD, plus "aplay: underrun!!!" here, while two on-demand ffmpegs at nice 2
+# took 78% and 90% of CPU. Starving the bridge glitches every deck at once, however well scheduled the
+# decks themselves are.
+#
+# Priority 20 is deliberately far below xwax's 80: xwax still wins every time they contend. This
+# process only reads bytes to /dev/null and blocks on ALSA the rest of the time, so it is I/O-bound
+# and safe to run FIFO - it cannot spin and starve the box.
+# HELD BACK DELIBERATELY - DO NOT ENABLE WITHOUT READING THIS.
+#
+# The three lines below are the right fix and are commented out on purpose. The owner's box is kept in
+# line with the two boxes in the field, so that what he tests is what they actually run. A release
+# tarball carries only server/ and xwax/, so nothing in pi/ can reach them; enabling this here would
+# protect new cards and his box while leaving the field on something different, which is how a fault
+# gets missed rather than found.
+#
+# Uncomment all three the moment pi/ can actually be delivered, and enable it
+# everywhere in the same change.
+#CPUSchedulingPolicy=fifo
+#CPUSchedulingPriority=20
+#LimitRTPRIO=30
+
+
+[Install]
+WantedBy=multi-user.target

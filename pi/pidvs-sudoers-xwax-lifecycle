@@ -1,0 +1,32 @@
+# /etc/sudoers.d/pidvs-xwax-lifecycle
+#
+# Lets the Node server (running as __BOX_USER__, see pidvs-server.service)
+# start and stop xwax@N.service on demand - see
+# server/src/xwax-lifecycle.js. Each deck's xwax process no longer
+# runs continuously from boot (see xwax@.service's own install
+# instructions below: daemon-reload only, deliberately NOT enabled) -
+# it only exists for as long as a track is actually loaded (or about
+# to be), started the moment a LOAD is requested for an empty deck and
+# stopped when passthrough turns on. This is what cuts the sustained
+# CPU/heat load of two continuously-running real-time timecode
+# decoders whenever the box is powered on but not actually being used -
+# see the Phase 1 thermal investigation that found xwax@1/xwax@2
+# together pulling ~130% combined CPU around the clock, sustaining a
+# soft thermal throttle, on hardware sitting completely idle.
+#
+# Scoped tightly to exactly these two command forms - start or stop a
+# specific xwax@N instance - not general systemctl access. The
+# absolute path (/usr/bin/systemctl) has to match exactly what
+# xwax-lifecycle.js actually invokes (see that file's own comment on
+# why it uses an absolute path rather than relying on PATH) - if
+# `which systemctl` on the real box ever returns something different,
+# both this file and xwax-lifecycle.js's SYSTEMCTL_PATH need updating
+# together.
+#
+# Install:
+#   sudo cp pidvs-sudoers-xwax-lifecycle /etc/sudoers.d/pidvs-xwax-lifecycle
+#   sudo chmod 440 /etc/sudoers.d/pidvs-xwax-lifecycle
+#   sudo visudo -c   # validate syntax before trusting it - a broken
+#                     # sudoers.d file can break sudo system-wide
+
+__BOX_USER__ ALL=(root) NOPASSWD: /usr/bin/systemctl start xwax@*.service, /usr/bin/systemctl stop xwax@*.service

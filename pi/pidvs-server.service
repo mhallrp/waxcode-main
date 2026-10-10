@@ -1,0 +1,68 @@
+# pidvs-server.service - the Node "brain": the HTTP API the browser UI talks to, plus Bonjour.
+#
+# WorkingDirectory points at ~/releases/current, a symlink to the active ~/releases/vN/ (updater/release-manager.js), not a fixed directory.
+# Runs as the same user as xwax@N.service, not root - connecting to xwax's Unix control sockets needs matching ownership.
+#
+#
+# After=pidvs-boot-recovery.service (2026-08-18) - that unit may flip `current` back to the last
+# confirmed-good version before this one ever starts, if the last update attempt never got to
+# confirm itself (eg. a power loss mid-activation) - see that unit's own doc comment.
+#
+# Install:
+#   sudo cp pidvs-server.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pidvs-server.service
+
+[Unit]
+Description=Waxcode Node server (HTTP API, Bonjour advertisement)
+After=pidvs-boot-recovery.service
+
+[Service]
+Type=simple
+User=__BOX_USER__
+# The updater wraps activation in `systemd-run --user --scope` so the restart it triggers
+# can't kill its own supervisor (see that file's own comment). --user needs to find waxcode's
+# user bus, and systemd does NOT set XDG_RUNTIME_DIR for a system service running as a user -
+# so without this, activation fails before it starts with "Failed to connect to user scope bus:
+# $DBUS_SESSION_BUS_ADDRESS and $XDG_RUNTIME_DIR not defined", and an update transfers fully
+# then silently does nothing. Confirmed on real hardware 2026-08-22, and the reason the original
+# fix looked correct: it was verified from an interactive SSH session, which sets this variable,
+# so the test never reproduced the environment the service actually runs in.
+# Needs `sudo loginctl enable-linger waxcode` so /run/user/1000 exists from boot without a login.
+# NOT %U - in a system unit that specifier is the service MANAGER's uid (0), not User='s, so it
+# silently produced /run/user/0 and failed exactly as before. Must match waxcode's real uid.
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+WorkingDirectory=/home/__BOX_USER__/releases/current
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+RestartSec=2
+Environment=PORT=8080
+# Lets the server also answer on port 80, so the address is just http://waxcodedvs.local with no
+# port to remember. Without this it still starts and still serves on PORT - see index.js.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+# Where this box keeps data/, releases/ and updater/. Read by server/src/box-paths.js rather than
+# hardcoded there, because the server ships as a release tarball - a path baked into the code would
+# be reinstated by every update, breaking any box whose user differs from the build machine's.
+Environment=PIDVS_HOME=/home/__BOX_USER__
+# This is the whole control brain - losing it drops every connected client at once. Strongly
+# discourage the OOM killer from picking it over a disposable prefetch child process (ffmpeg/aubio/
+# keyfinder-cli) -. Not -1000 (fully exempt) -
+# a genuine runaway leak should still be killable as an actual last resort, just never the first pick.
+OOMScoreAdjust=-500
+
+# CPU-scheduling counterpart to OOMScoreAdjust above - a deliberate priority reservation, not full
+# protection (xwax's own audio thread stays the one thing with genuine real-time SCHED_FIFO
+# priority, confirmed 2026-08-08 via `chrt -p` on the live process - this can't and shouldn't
+# outrank that). What this DOES fix: this process relays deck status between xwax and the
+# app (~50ms poll cadence) - background prefetch's own ffmpeg/aubio children are niced to +19 and
+# pinned off onto their own CPU core already, but this process itself was still ordinary priority
+# (0), same as everything else sharing the remaining cores. Under a large background library scan
+# (confirmed on real hardware: 2,745-track scan, this process alone at ~130% CPU across threads),
+# that relay could lag, surfacing as small live waveform-position jitter in the app - not an actual
+# audio glitch (the real-time thread was never at risk), just this process losing its own
+# scheduling turn to other equal-priority work. -10 gives it a real edge over that ordinary-priority
+# contention without touching real-time scheduling at all.
+Nice=-10
+
+[Install]
+WantedBy=multi-user.target
