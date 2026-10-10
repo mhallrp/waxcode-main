@@ -1,0 +1,25 @@
+/* GENERATED from the iOS app by tools/generate-design-tokens.mjs - do not edit.
+   Re-run that script after changing PiDVS/DesignSystem or the waveform constants. */
+
+:root {
+  --background: #0C0B10;
+  --surface: #17141C;
+  --surface2: #201C27;
+  --hairline: #322E3A;
+  --ink: #F1EEE9;
+  --ink-dim: #938E9C;
+  --ink-faint: #625D6B;
+  --deck-a: #3AD9C4;
+  --deck-a-dim: #1F5A52;
+  --deck-b: #F3924D;
+  --deck-b-dim: #6B4626;
+  --cue: #4FD97E;
+  --recording: #E5484D;
+  --warning: #E5484D;
+
+  /* Kept as a name this stylesheet already uses; --warning is the generated one. */
+  --alert: #E5484D;
+
+  /* The cue marker drawn on a waveform - WaveformRendering.cueColor. */
+  --cue-marker: rgb(255,153,0);
+}
