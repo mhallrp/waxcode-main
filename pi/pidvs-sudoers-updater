@@ -1,0 +1,25 @@
+# /etc/sudoers.d/pidvs-updater
+#
+# Lets the updater (running as __BOX_USER__, see updater/release-manager.js)
+# restart pidvs-server.service to activate a newly-staged release, or
+# roll back to a previous one - see that file's own doc comment for
+# the full activate()/rollback flow. `systemctl is-active` (the
+# health check itself) needs no privilege and isn't listed here -
+# confirmed on real hardware.
+#
+# Scoped tightly to exactly this one service, one action - not
+# general systemctl access, and deliberately not xwax@*.service
+# either (that's pidvs-sudoers-xwax-lifecycle's job, a completely
+# separate concern). The absolute paths (/usr/bin/sudo,
+# /usr/bin/systemctl) have to match exactly what release-manager.js
+# actually invokes - if `which systemctl` on the real box ever
+# returns something different, both this file and that one need
+# updating together.
+#
+# Install:
+#   sudo cp pidvs-sudoers-updater /etc/sudoers.d/pidvs-updater
+#   sudo chmod 440 /etc/sudoers.d/pidvs-updater
+#   sudo visudo -c   # validate syntax before trusting it - a broken
+#                     # sudoers.d file can break sudo system-wide
+
+__BOX_USER__ ALL=(root) NOPASSWD: /usr/bin/systemctl restart pidvs-server.service
