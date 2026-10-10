@@ -1,0 +1,34 @@
+# /etc/sudoers.d/pidvs-network
+#
+# Lets the box manage its OWN wireless connection: join a network the owner
+# chose, forget one, and put up its own setup access point when it has none.
+#
+# This exists because the browser UI made WiFi load-bearing again. WiFi setup
+# was deliberately removed on 2026-07-21, when BLE was the only control path
+# and nothing a consumer did needed a network at all. That is no longer true:
+# someone without the iOS app reaches the box over WiFi or not at all, and a
+# box that cannot be put onto WiFi without a terminal is one they cannot use.
+#
+# Why sudo and not a polkit rule: NetworkManager refuses `wifi.share.open` and
+# `wifi.share.protected` OUTRIGHT for a user with no local seat - "no", not
+# "auth", so no password can satisfy it and a background service never will.
+# The hotspot has to be created by root. Checked on the box, 2026-09-26.
+#
+# Scoped to ONE script with a fixed set of subcommands, not to `nmcli` with
+# arbitrary arguments. Everything that could take the box off the air for good
+# lives behind that script, which always leaves a way back - see its own
+# header. A grant of `nmcli *` would not have that property.
+#
+# `__BOX_USER__` is a PLACEHOLDER for the box account, not a real user - provision.sh's substitute()
+# rewrites it, and so does wifi-provision.js when it installs this on a box that provisioning can
+# no longer reach. Same convention as every other file here; see provision.sh's own note.
+#
+# This lives under server/ rather than pi/ because a release tarball carries only server/, and the
+# two boxes already in the field can be reached by nothing else.
+#
+# Install (provisioning does this for you):
+#   sudo cp pidvs-network.sudoers /etc/sudoers.d/pidvs-network
+#   sudo chmod 440 /etc/sudoers.d/pidvs-network
+#   sudo visudo -c
+
+__BOX_USER__ ALL=(root) NOPASSWD: /usr/local/bin/pidvs-network status, /usr/local/bin/pidvs-network scan, /usr/local/bin/pidvs-network ap-up, /usr/local/bin/pidvs-network ap-down, /usr/local/bin/pidvs-network join *, /usr/local/bin/pidvs-network forget *

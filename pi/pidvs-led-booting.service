@@ -1,0 +1,21 @@
+# pidvs-led-booting.service - sets the ACT LED's "still booting" blink as early as possible in boot. Runs as root, deliberately NOT __BOX_USER__ -
+# must run before 50-pidvs-led-permissions.rules is guaranteed applied, and root doesn't need that rule's chmod at all.
+#
+# Install:
+#   sudo cp pidvs-led-booting.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable pidvs-led-booting.service
+
+[Unit]
+Description=Waxcode boot-in-progress LED indicator
+DefaultDependencies=no
+After=systemd-udevd.service
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pidvs-led-booting.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

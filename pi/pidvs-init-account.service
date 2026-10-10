@@ -1,0 +1,14 @@
+[Unit]
+Description=Give the box account a usable password so its user manager can start
+DefaultDependencies=no
+After=local-fs.target
+Before=systemd-user-sessions.service pidvs-server.service
+ConditionPathExists=!/var/lib/pidvs-account-initialised
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pidvs-init-account __BOX_USER__
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
