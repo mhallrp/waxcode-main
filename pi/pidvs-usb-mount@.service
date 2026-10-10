@@ -1,0 +1,21 @@
+# pidvs-usb-mount@.service - runs usb-mount.sh's "add" handling for one device (%i, eg. "sda2") as a dependency-ordered systemd unit
+# instead of directly from udev's RUN+= (see 99-pidvs-usb.rules).
+#
+# Confirmed on real hardware: udev's boot coldplug pass runs before D-Bus is up, and a direct RUN+= invocation raced systemd-run and lost
+# outright ("Failed to connect to system scope bus") - matching real reports of needing to unplug/reinsert an already-connected drive.
+#
+# Also ordered after pidvs-server.service, not just dbus - usb-mount.sh's closing POST to /scan would otherwise fail if Node isn't up yet either.
+# Only "add" changed - "remove" stays direct RUN+= since a real unplug only ever happens well after boot.
+#
+# Install:
+#   sudo cp pidvs-usb-mount@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+
+[Unit]
+Description=Waxcode USB mount/scan for %i
+After=dbus.service pidvs-server.service
+Wants=pidvs-server.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pidvs-usb-mount.sh add %i

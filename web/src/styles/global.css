@@ -1,0 +1,95 @@
+@import './tokens.css';
+
+/* Everything here is either a reset or a value shared by more than one component. Anything a single
+   component owns lives in that component's own .module.css, next to it. */
+
+/*
+ * The SEMANTIC layer. tokens.css holds what the colours ARE (generated from the iOS app); these say
+ * what they are FOR. Keeping them apart is what lets --accent mean "this deck's colour" and be
+ * rebound per deck, without the generated file knowing anything about decks.
+ */
+:root {
+  --bg: var(--background);
+  --accent: var(--deck-a);
+  --accent-dim: var(--deck-a-dim);
+  /* The transport's green. Named for its job, since it is not the cue MARKER on a waveform. */
+  --play: var(--cue);
+
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  --radius: 6px;
+
+  /* The device's own inset, republished as a plain custom property so JavaScript can read it -
+     getComputedStyle cannot evaluate env() on its own. A popup menu clamps against the CONTENT
+     edge, which is inset by this, not against the raw viewport. */
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  --gap-sm: 8px;
+  --gap: 14px;
+  --gap-lg: 22px;
+
+  /* Every control row in a deck card is the same height. One value, because two (48/42) was an
+     invention that made the columns disagree with each other. */
+  --row: 46px;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  /* --app-height is measured by appHeight.ts because iOS reports the viewport wrongly when this is
+     launched already in landscape. 100% is the fallback, and is what every other browser uses. */
+  height: var(--app-height, 100%);
+  margin: 0;
+  /* The app fills the screen and never scrolls the document - a document scroll under a fixed
+     layout leaves iOS hit-testing pointing at where things used to be. */
+  overflow: hidden;
+}
+
+body {
+  /* The safe area, for everything in normal flow, in one place.
+     On BODY rather than on each screen because that is what makes it inherited: the decks and the
+     toolbar sit in normal flow and would otherwise each have to remember. Every position:fixed
+     overlay escapes this padding and carries its own insets - which is all of them, so in practice
+     this rule is the deck screen's.
+
+     THE BOTTOM IS DELIBERATELY NOT CEDED, matching PhoneOverviewView's
+     `.ignoresSafeArea(.container, edges: .bottom)` and its reasoning (2026-08-19): locked to
+     landscape, the Dynamic Island - the actual reason iOS reserves an asymmetric safe area - is off
+     to the SIDE. The ~21px it reserves along the bottom buys nothing here and space matters more in
+     landscape, so the screens below substitute their own bottom padding instead.
+
+     ON #root, NOT ON BODY. Launched straight into landscape, iOS reports the PORTRAIT inset for a
+     moment - and with the padding on body, that stale value came out of body's height, leaving the
+     app short by it and a gap along the bottom that nothing ever corrected. Rotating INTO landscape
+     was always fine, because the rotation re-evaluated it; opening already rotated was not
+     (reported on a real phone, 2026-10-16). Everything is border-box, so on #root the inset is
+     taken out of the INSIDE of a box that is always exactly the viewport, and a stale value can
+     only shift content a little rather than shorten the app. */
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 15px/1.4 var(--sans);
+  -webkit-tap-highlight-color: transparent;
+  /* Landscape on iOS otherwise inflates text on its own, which throws out every fixed height here. */
+  -webkit-text-size-adjust: 100%;
+  /* No rubber-band on a control surface - a stray vertical drag should not lift the whole app. */
+  overscroll-behavior: none;
+}
+
+#root {
+  /* See the safe-area note on body: this is where the inset is spent, so the app's own box stays
+     exactly the viewport however late iOS gets round to reporting the right numbers. */
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+           0 env(safe-area-inset-left, 0px);
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button { cursor: pointer; }
+
+/* Visible focus, but only for keyboard users - a focus ring after every tap is noise on a phone. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus:not(:focus-visible) { outline: none; }

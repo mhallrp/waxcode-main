@@ -1,0 +1,37 @@
+# pidvs-deck-watchdog.service - captures diagnostics when a deck's control socket stops responding.
+#
+# Exists because of 2026-09-16: deck 1's xwax kept its audio thread running and its process alive
+# while silently no longer servicing its control socket, so every command the app sent was written
+# into a socket nobody read. The deck looked responsive in the app and ignored everything. By the
+# time it was investigated, a restart had already destroyed the state that would have explained it.
+#
+# Runs as root, unlike almost everything else here, because the capture needs it: gdb attaching to
+# another user's process, gcore, and /proc/<pid>/task/*/stack are all privileged. It only ever
+# reads, plus the one write that matters: restarting a wedged deck, hard-limited to 3 an hour so it
+# can never become the rapid xwax cycling that has crashed this hardware before.
+
+[Unit]
+Description=Waxcode deck control-socket watchdog (captures diagnostics, then recovers)
+# Follows the server's journal, so it is useless before the server exists.
+After=pidvs-server.service
+Wants=pidvs-server.service
+
+[Service]
+Type=simple
+User=root
+Environment=PIDVS_DIAG_DIR=/home/__BOX_USER__/diagnostics
+ExecStart=/usr/local/bin/pidvs-deck-watchdog
+Restart=always
+RestartSec=5
+
+# Nice'd hard: this is pure diagnostics and must never compete with the realtime audio thread it
+# is watching. The capture itself is slow (gcore, gdb) and entirely non-urgent.
+Nice=19
+IOSchedulingClass=idle
+
+# The box is 1GB and this is the least important process on it - the opposite of the -500 the
+# audio path and the server carry.
+OOMScoreAdjust=500
+
+[Install]
+WantedBy=multi-user.target
